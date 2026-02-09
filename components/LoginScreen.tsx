@@ -85,11 +85,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
               Entrar no Sistema
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
-
-            <div className="pt-4 border-t border-gray-100 dark:border-gray-700 text-center text-xs text-gray-400 space-y-1">
-               <p>Acesso Restrito.</p>
-               <p>Compras: <span className="font-mono">compras / 123</span></p>
-            </div>
           </form>
         </div>
       </div>
