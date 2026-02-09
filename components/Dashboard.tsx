@@ -1,10 +1,11 @@
+
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Wrench, Package, AlertTriangle, CheckCircle, Clock, ShoppingCart, TrendingUp, Users } from 'lucide-react';
+import { Wrench, Package, AlertTriangle, CheckCircle, Clock, ShoppingCart, TrendingUp, Users, Server, RefreshCw } from 'lucide-react';
 import { WorkOrderStatus } from '../types';
 
 export const Dashboard: React.FC = () => {
-  const { workOrders, inventory, purchaseOrders, users, sectors } = useApp();
+  const { workOrders, inventory, purchaseOrders, serverStatus, refreshData } = useApp();
 
   const totalOS = workOrders.length;
   const pendingOS = workOrders.filter(o => o.status === WorkOrderStatus.PREPARATION || o.status === WorkOrderStatus.IN_PROGRESS).length;
@@ -23,13 +24,25 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="p-6 space-y-8">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
             <TrendingUp className="w-6 h-6 text-indigo-500" />
             Painel de Indicadores
           </h2>
           <p className="text-gray-500 dark:text-gray-400">Resumo da operação e produtividade da manutenção.</p>
+        </div>
+        
+        <div className={`flex items-center gap-3 px-4 py-2 rounded-xl border ${
+          serverStatus === 'ONLINE' ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' :
+          serverStatus === 'CONNECTING' ? 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800' :
+          'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
+        }`}>
+          <Server className={`w-4 h-4 ${serverStatus === 'CONNECTING' ? 'animate-pulse' : ''}`} />
+          <span className="text-xs font-bold uppercase tracking-wider">Servidor {serverStatus}</span>
+          <button onClick={() => refreshData()} className="p-1 hover:bg-black/5 rounded transition">
+            <RefreshCw className={`w-3 h-3 ${serverStatus === 'CONNECTING' ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </div>
 
@@ -48,7 +61,6 @@ export const Dashboard: React.FC = () => {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-8">
-        {/* Distribuição de O.S. */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
           <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-2">
             <Wrench className="w-5 h-5 text-blue-500" /> Status das Ordens de Serviço
@@ -76,7 +88,6 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Estoque Crítico */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
           <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-2">
             <Package className="w-5 h-5 text-indigo-500" /> Itens Críticos de Estoque

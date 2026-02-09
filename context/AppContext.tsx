@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { 
   InventoryItem, 
   WorkOrder, 
@@ -8,9 +9,7 @@ import {
   RequestStatus,
   MaterialRequestItem,
   StockEntryLog,
-  WorkOrderHistoryEntry,
   User,
-  UserRole,
   ResourceRequest,
   Sector,
   PurchaseOrder,
@@ -39,9 +38,10 @@ interface AppContextType {
   equipments: Equipment[];
   databaseConfig: DatabaseConfig;
   theme: 'light' | 'dark';
+  serverStatus: 'ONLINE' | 'OFFLINE' | 'CONNECTING';
   
   toggleTheme: () => void;
-  updateDatabaseConfig: (config: DatabaseConfig) => void;
+  updateDatabaseConfig: (config: DatabaseConfig) => Promise<void>;
   addWorkOrder: (wo: Omit<WorkOrder, 'id' | 'createdAt' | 'requests' | 'status' | 'history'>, needsMaterials: boolean) => void;
   createMaterialRequest: (workOrderId: string, items: MaterialRequestItem[]) => void;
   processRequest: (requestId: string, approved: boolean) => void;
@@ -51,15 +51,8 @@ interface AppContextType {
   updatePurchaseStatus: (id: string, status: PurchaseStatus) => void;
   completePurchaseReception: (purchaseOrderId: string) => void;
   updateInventory: (item: InventoryItem) => void;
-  addInventoryItem: (
-    itemData: Omit<InventoryItem, 'id'>, 
-    entryData: { purchaseId: string; invoiceNumber?: string; noInvoiceReason?: string }
-  ) => void;
-  restockInventoryItem: (
-    itemId: string, 
-    quantityToAdd: number,
-    entryData: { purchaseId: string; invoiceNumber?: string; noInvoiceReason?: string }
-  ) => void;
+  addInventoryItem: (itemData: Omit<InventoryItem, 'id'>, entryData: any) => void;
+  restockInventoryItem: (itemId: string, quantityToAdd: number, entryData: any) => void;
   updateWorkOrderStatus: (workOrderId: string, newStatus: WorkOrderStatus, notes: string) => void;
   reopenWorkOrder: (workOrderId: string, notes: string, needsMaterials: boolean) => void;
   addUser: (user: Omit<User, 'id'>) => void;
@@ -81,126 +74,128 @@ interface AppContextType {
   removeEquipment: (id: string) => void;
   exportDatabase: () => void;
   importDatabase: (jsonData: string) => void;
+  refreshData: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const KEYS = {
-  INVENTORY: 'df_inventory',
-  WORK_ORDERS: 'df_work_orders',
-  MATERIAL_REQUESTS: 'df_material_requests',
-  RESOURCE_REQUESTS: 'df_resource_requests',
-  PURCHASE_ORDERS: 'df_purchase_orders',
-  USAGE_LOGS: 'df_usage_logs',
-  STOCK_ENTRIES: 'df_stock_entries',
-  USERS: 'df_users',
-  SECTORS: 'df_sectors',
-  EXTENSIONS: 'df_extensions',
-  GUIDES: 'df_guides',
-  SUPPORT_TICKETS: 'df_support_tickets',
-  EQUIPMENTS: 'df_equipments',
-  THEME: 'df_theme'
-};
-
-const INITIAL_INVENTORY: InventoryItem[] = [
-  { id: '1', name: 'Parafuso Sextavado M6', category: 'Fixadores', quantity: 500, unit: 'un', minThreshold: 100, sectorId: '1' },
-  { id: '2', name: 'Óleo Lubrificante 10W40', category: 'Fluidos', quantity: 25, unit: 'L', minThreshold: 5, sectorId: '1' },
-];
-
-const INITIAL_USERS: User[] = [
-  { id: '0', username: 'super', password: '123', name: 'Super Admin', role: 'SUPER_ADMIN', hasPortalAccess: true },
-  { id: '1', username: 'admin', password: '123', name: 'Admin TI', role: 'IT_ADMIN', hasPortalAccess: true, extension: '101' },
-  { id: 'user', username: 'user', password: '123', name: 'Colaborador Teste', role: 'USER', hasPortalAccess: true },
-];
-
-const INITIAL_SECTORS: Sector[] = [
-  { id: '1', name: 'Manutenção', costCenter: '1001' },
-  { id: '2', name: 'TI', costCenter: '1002' },
-];
+// URL do Servidor Python na Intranet (Pode ser alterado para o IP do servidor)
+const API_BASE = "http://localhost:5000/api";
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const load = <T,>(key: string, defaultValue: T): T => {
-    const saved = localStorage.getItem(key);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [materialRequests, setMaterialRequests] = useState<MaterialRequest[]>([]);
+  const [resourceRequests, setResourceRequests] = useState<ResourceRequest[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [usageLogs, setUsageLogs] = useState<UsageLog[]>([]);
+  const [stockEntries, setStockEntries] = useState<StockEntryLog[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [sectors, setSectors] = useState<Sector[]>([]);
+  const [extensions, setExtensions] = useState<Extension[]>([]);
+  const [guides, setGuides] = useState<MaintenanceGuide[]>([]);
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
+  const [equipments, setEquipments] = useState<Equipment[]>([]);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [serverStatus, setServerStatus] = useState<'ONLINE' | 'OFFLINE' | 'CONNECTING'>('CONNECTING');
+  const [databaseConfig, setDatabaseConfig] = useState<DatabaseConfig>({ type: 'LOCAL', status: 'LOCAL' });
+
+  // Funções de API
+  const apiSave = async (entity: string, data: any) => {
     try {
-      return saved ? JSON.parse(saved) : defaultValue;
-    } catch {
-      return defaultValue;
-    }
-  };
-
-  const [inventory, setInventory] = useState<InventoryItem[]>(() => load(KEYS.INVENTORY, INITIAL_INVENTORY));
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() => load(KEYS.WORK_ORDERS, []));
-  const [materialRequests, setMaterialRequests] = useState<MaterialRequest[]>(() => load(KEYS.MATERIAL_REQUESTS, []));
-  const [resourceRequests, setResourceRequests] = useState<ResourceRequest[]>(() => load(KEYS.RESOURCE_REQUESTS, []));
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => load(KEYS.PURCHASE_ORDERS, []));
-  const [usageLogs, setUsageLogs] = useState<UsageLog[]>(() => load(KEYS.USAGE_LOGS, []));
-  const [stockEntries, setStockEntries] = useState<StockEntryLog[]>(() => load(KEYS.STOCK_ENTRIES, []));
-  const [users, setUsers] = useState<User[]>(() => load(KEYS.USERS, INITIAL_USERS));
-  const [sectors, setSectors] = useState<Sector[]>(() => load(KEYS.SECTORS, INITIAL_SECTORS));
-  const [extensions, setExtensions] = useState<Extension[]>(() => load(KEYS.EXTENSIONS, []));
-  const [guides, setGuides] = useState<MaintenanceGuide[]>(() => load(KEYS.GUIDES, []));
-  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(() => load(KEYS.SUPPORT_TICKETS, []));
-  const [equipments, setEquipments] = useState<Equipment[]>(() => load(KEYS.EQUIPMENTS, []));
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => load(KEYS.THEME, 'dark'));
-  const [databaseConfig] = useState<DatabaseConfig>({ type: 'LOCAL', status: 'LOCAL' });
-
-  useEffect(() => { localStorage.setItem(KEYS.INVENTORY, JSON.stringify(inventory)); }, [inventory]);
-  useEffect(() => { localStorage.setItem(KEYS.WORK_ORDERS, JSON.stringify(workOrders)); }, [workOrders]);
-  useEffect(() => { localStorage.setItem(KEYS.MATERIAL_REQUESTS, JSON.stringify(materialRequests)); }, [materialRequests]);
-  useEffect(() => { localStorage.setItem(KEYS.RESOURCE_REQUESTS, JSON.stringify(resourceRequests)); }, [resourceRequests]);
-  useEffect(() => { localStorage.setItem(KEYS.PURCHASE_ORDERS, JSON.stringify(purchaseOrders)); }, [purchaseOrders]);
-  useEffect(() => { localStorage.setItem(KEYS.USAGE_LOGS, JSON.stringify(usageLogs)); }, [usageLogs]);
-  useEffect(() => { localStorage.setItem(KEYS.STOCK_ENTRIES, JSON.stringify(stockEntries)); }, [stockEntries]);
-  useEffect(() => { localStorage.setItem(KEYS.USERS, JSON.stringify(users)); }, [users]);
-  useEffect(() => { localStorage.setItem(KEYS.SECTORS, JSON.stringify(sectors)); }, [sectors]);
-  useEffect(() => { localStorage.setItem(KEYS.EXTENSIONS, JSON.stringify(extensions)); }, [extensions]);
-  useEffect(() => { localStorage.setItem(KEYS.GUIDES, JSON.stringify(guides)); }, [guides]);
-  useEffect(() => { localStorage.setItem(KEYS.SUPPORT_TICKETS, JSON.stringify(supportTickets)); }, [supportTickets]);
-  useEffect(() => { localStorage.setItem(KEYS.EQUIPMENTS, JSON.stringify(equipments)); }, [equipments]);
-  useEffect(() => {
-    localStorage.setItem(KEYS.THEME, JSON.stringify(theme));
-    if (theme === 'dark') document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
-  }, [theme]);
-
-  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  const updateDatabaseConfig = () => {}; 
-
-  const exportDatabase = () => {
-    const data = {
-      inventory, workOrders, materialRequests, resourceRequests, purchaseOrders, 
-      usageLogs, stockEntries, users, sectors, extensions, guides, supportTickets, equipments
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `dutyfinder_backup_${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
-  };
-
-  const importDatabase = (jsonData: string) => {
-    try {
-      const data = JSON.parse(jsonData);
-      if (data.inventory) setInventory(data.inventory);
-      if (data.workOrders) setWorkOrders(data.workOrders);
-      if (data.materialRequests) setMaterialRequests(data.materialRequests);
-      if (data.resourceRequests) setResourceRequests(data.resourceRequests);
-      if (data.purchaseOrders) setPurchaseOrders(data.purchaseOrders);
-      if (data.usageLogs) setUsageLogs(data.usageLogs);
-      if (data.stockEntries) setStockEntries(data.stockEntries);
-      if (data.users) setUsers(data.users);
-      if (data.sectors) setSectors(data.sectors);
-      if (data.extensions) setExtensions(data.extensions);
-      if (data.guides) setGuides(data.guides);
-      if (data.supportTickets) setSupportTickets(data.supportTickets);
-      if (data.equipments) setEquipments(data.equipments);
-      alert("Banco de dados local importado com sucesso!");
+      await fetch(`${API_BASE}/save/${entity}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
     } catch (e) {
-      alert("Erro ao importar dados. Verifique o formato do arquivo.");
+      console.error(`Falha ao salvar ${entity} no servidor:`, e);
+      setServerStatus('OFFLINE');
     }
   };
 
+  const apiLoad = async (entity: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/load/${entity}`);
+      if (res.ok) return await res.json();
+    } catch (e) {
+      setServerStatus('OFFLINE');
+    }
+    return null;
+  };
+
+  const refreshData = useCallback(async () => {
+    setServerStatus('CONNECTING');
+    const entities = [
+      { key: 'inventory', setter: setInventory },
+      { key: 'work_orders', setter: setWorkOrders },
+      { key: 'material_requests', setter: setMaterialRequests },
+      { key: 'resource_requests', setter: setResourceRequests },
+      { key: 'purchase_orders', setter: setPurchaseOrders },
+      { key: 'usage_logs', setter: setUsageLogs },
+      { key: 'stock_entries', setter: setStockEntries },
+      { key: 'users', setter: setUsers },
+      { key: 'sectors', setter: setSectors },
+      { key: 'extensions', setter: setExtensions },
+      { key: 'guides', setter: setGuides },
+      { key: 'support_tickets', setter: setSupportTickets },
+      { key: 'equipments', setter: setEquipments }
+    ];
+
+    let allOk = true;
+    for (const entity of entities) {
+      const data = await apiLoad(entity.key);
+      if (data) entity.setter(data);
+      else allOk = false;
+    }
+    
+    if (allOk) setServerStatus('ONLINE');
+    else setServerStatus('OFFLINE');
+  }, []);
+
+  useEffect(() => {
+    refreshData();
+    // Pooling para manter dados atualizados na intranet a cada 30 segundos
+    const interval = setInterval(refreshData, 30000);
+    return () => clearInterval(interval);
+  }, [refreshData]);
+
+  // Wrappers para persistência automática
+  useEffect(() => { if(inventory.length) apiSave('inventory', inventory); }, [inventory]);
+  useEffect(() => { if(workOrders.length) apiSave('work_orders', workOrders); }, [workOrders]);
+  useEffect(() => { if(materialRequests.length) apiSave('material_requests', materialRequests); }, [materialRequests]);
+  useEffect(() => { if(resourceRequests.length) apiSave('resource_requests', resourceRequests); }, [resourceRequests]);
+  useEffect(() => { if(purchaseOrders.length) apiSave('purchase_orders', purchaseOrders); }, [purchaseOrders]);
+  useEffect(() => { if(usageLogs.length) apiSave('usage_logs', usageLogs); }, [usageLogs]);
+  useEffect(() => { if(stockEntries.length) apiSave('stock_entries', stockEntries); }, [stockEntries]);
+  useEffect(() => { if(users.length) apiSave('users', users); }, [users]);
+  useEffect(() => { if(sectors.length) apiSave('sectors', sectors); }, [sectors]);
+  useEffect(() => { if(extensions.length) apiSave('extensions', extensions); }, [extensions]);
+  useEffect(() => { if(guides.length) apiSave('guides', guides); }, [guides]);
+  useEffect(() => { if(supportTickets.length) apiSave('support_tickets', supportTickets); }, [supportTickets]);
+  useEffect(() => { if(equipments.length) apiSave('equipments', equipments); }, [equipments]);
+
+  const updateDatabaseConfig = async (config: DatabaseConfig) => {
+    try {
+      const res = await fetch(`${API_BASE}/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+      const result = await res.json();
+      if (res.ok) {
+        setDatabaseConfig({ ...config, status: 'CONNECTED' });
+        alert(result.message);
+        refreshData();
+      } else {
+        alert("Erro: " + result.message);
+      }
+    } catch (e) {
+      alert("Falha ao conectar ao servidor backend Python.");
+    }
+  };
+
+  // Funções de Negócio (Adaptadas para chamadas de estado que disparam useEffects de API)
   const addWorkOrder = (woData: any, needsMaterials: boolean) => {
     const initialStatus = needsMaterials ? WorkOrderStatus.PREPARATION : WorkOrderStatus.IN_PROGRESS;
     const newWO: WorkOrder = {
@@ -236,13 +231,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setMaterialRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: RequestStatus.REJECTED } : r));
       return;
     }
-    let canProcess = true;
     const updatedInventory = [...inventory];
+    let canProcess = true;
     for (const reqItem of request.items) {
       const invItem = updatedInventory.find(i => i.id === reqItem.itemId);
       if (!invItem || invItem.quantity < reqItem.quantityRequested) {
         canProcess = false;
-        alert(`Estoque insuficiente para: ${reqItem.itemName}`);
+        alert(`Estoque insuficiente: ${reqItem.itemName}`);
         break;
       }
     }
@@ -263,45 +258,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setInventory(updatedInventory);
       setUsageLogs(prev => [...logs, ...prev]);
       setMaterialRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: RequestStatus.APPROVED, approvedAt: Date.now() } : r));
-      setWorkOrders(prev => prev.map(wo => {
-        if (wo.id === request.workOrderId && wo.status === WorkOrderStatus.PREPARATION) {
-          return { ...wo, status: WorkOrderStatus.IN_PROGRESS };
-        }
-        return wo;
-      }));
+      setWorkOrders(prev => prev.map(wo => wo.id === request.workOrderId && wo.status === WorkOrderStatus.PREPARATION ? { ...wo, status: WorkOrderStatus.IN_PROGRESS } : wo));
     }
   };
 
-  const addResourceRequest = (req: any) => {
-    setResourceRequests(prev => [{ ...req, id: crypto.randomUUID(), status: 'PENDENTE', createdAt: Date.now() }, ...prev]);
-  };
-
-  const processResourceRequest = (requestId: string, approved: boolean, approverName: string) => {
-    setResourceRequests(prev => prev.map(req => req.id === requestId ? { ...req, status: approved ? 'LIBERADO' : 'REJEITADO', approvedBy: approved ? approverName : undefined, approvedAt: Date.now() } : req));
-  };
-
-  const addPurchaseOrder = (po: any) => {
-    setPurchaseOrders(prev => [{ ...po, id: crypto.randomUUID(), status: 'ORDERED' }, ...prev]);
-  };
-
-  const updatePurchaseStatus = (id: string, status: PurchaseStatus) => {
-    setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, status, arrivalDate: status === 'ARRIVED' ? Date.now() : po.arrivalDate } : po));
-  };
-
+  const addResourceRequest = (req: any) => setResourceRequests(prev => [{ ...req, id: crypto.randomUUID(), status: 'PENDENTE', createdAt: Date.now() }, ...prev]);
+  const processResourceRequest = (requestId: string, approved: boolean, approverName: string) => setResourceRequests(prev => prev.map(req => req.id === requestId ? { ...req, status: approved ? 'LIBERADO' : 'REJEITADO', approvedBy: approved ? approverName : undefined, approvedAt: Date.now() } : req));
+  const addPurchaseOrder = (po: any) => setPurchaseOrders(prev => [{ ...po, id: crypto.randomUUID(), status: 'ORDERED' }, ...prev]);
+  const updatePurchaseStatus = (id: string, status: PurchaseStatus) => setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, status, arrivalDate: status === 'ARRIVED' ? Date.now() : po.arrivalDate } : po));
   const completePurchaseReception = (purchaseOrderId: string) => {
     const po = purchaseOrders.find(p => p.id === purchaseOrderId);
     if (!po || po.status === 'STOCKED') return;
     const newInventory = [...inventory];
     const entries: StockEntryLog[] = [];
-    po.items.forEach(poItem => {
-      const idx = newInventory.findIndex(i => i.name.toLowerCase().trim() === poItem.name.toLowerCase().trim());
+    po.items.forEach(item => {
+      const idx = newInventory.findIndex(i => i.name.toLowerCase().trim() === item.name.toLowerCase().trim());
       if (idx >= 0) {
-        newInventory[idx].quantity += poItem.quantity;
-        entries.push({ id: crypto.randomUUID(), itemId: newInventory[idx].id, itemName: poItem.name, quantityAdded: poItem.quantity, purchaseId: po.orderNumber, invoiceNumber: po.invoiceNumber, date: Date.now(), type: 'RESTOCK' });
+        newInventory[idx].quantity += item.quantity;
+        entries.push({ id: crypto.randomUUID(), itemId: newInventory[idx].id, itemName: item.name, quantityAdded: item.quantity, purchaseId: po.orderNumber, invoiceNumber: po.invoiceNumber, date: Date.now(), type: 'RESTOCK' });
       } else {
-        const newItemId = crypto.randomUUID();
-        newInventory.push({ id: newItemId, name: poItem.name, category: poItem.category, quantity: poItem.quantity, unit: poItem.unit, minThreshold: 5 });
-        entries.push({ id: crypto.randomUUID(), itemId: newItemId, itemName: poItem.name, quantityAdded: poItem.quantity, purchaseId: po.orderNumber, invoiceNumber: po.invoiceNumber, date: Date.now(), type: 'INITIAL' });
+        const id = crypto.randomUUID();
+        newInventory.push({ id, name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, minThreshold: 5 });
+        entries.push({ id: crypto.randomUUID(), itemId: id, itemName: item.name, quantityAdded: item.quantity, purchaseId: po.orderNumber, invoiceNumber: po.invoiceNumber, date: Date.now(), type: 'INITIAL' });
       }
     });
     setInventory(newInventory);
@@ -315,59 +293,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setInventory(prev => [...prev, { ...itemData, id }]);
     setStockEntries(prev => [{ id: crypto.randomUUID(), itemId: id, itemName: itemData.name, quantityAdded: itemData.quantity, ...entryData, date: Date.now(), type: 'INITIAL' }, ...prev]);
   };
-
   const restockInventoryItem = (itemId: string, qty: number, entryData: any) => {
     const item = inventory.find(i => i.id === itemId);
     if (!item) return;
     setInventory(prev => prev.map(i => i.id === itemId ? { ...i, quantity: i.quantity + qty } : i));
     setStockEntries(prev => [{ id: crypto.randomUUID(), itemId, itemName: item.name, quantityAdded: qty, ...entryData, date: Date.now(), type: 'RESTOCK' }, ...prev]);
   };
-
-  const updateWorkOrderStatus = (workOrderId: string, newStatus: WorkOrderStatus, notes: string) => {
-    setWorkOrders(prev => prev.map(wo => wo.id === workOrderId ? { ...wo, status: newStatus, history: [{ id: crypto.randomUUID(), date: Date.now(), status: newStatus, notes, type: 'STATUS_CHANGE' }, ...wo.history] } : wo));
-  };
-
+  const updateWorkOrderStatus = (workOrderId: string, newStatus: WorkOrderStatus, notes: string) => setWorkOrders(prev => prev.map(wo => wo.id === workOrderId ? { ...wo, status: newStatus, history: [{ id: crypto.randomUUID(), date: Date.now(), status: newStatus, notes, type: 'STATUS_CHANGE' }, ...wo.history] } : wo));
   const reopenWorkOrder = (workOrderId: string, notes: string, needsMaterials: boolean) => {
     const nextStatus = needsMaterials ? WorkOrderStatus.PREPARATION : WorkOrderStatus.IN_PROGRESS;
     setWorkOrders(prev => prev.map(wo => wo.id === workOrderId ? { ...wo, status: nextStatus, history: [{ id: crypto.randomUUID(), date: Date.now(), status: nextStatus, notes: `Reabertura: ${notes}`, type: 'REOPEN' }, ...wo.history] } : wo));
   };
-
   const addUser = (u: any) => setUsers(prev => [...prev, { ...u, id: crypto.randomUUID() }]);
   const removeUser = (id: string) => setUsers(prev => prev.filter(u => u.id !== id));
   const updateUserPassword = (id: string, pw: string) => setUsers(prev => prev.map(u => u.id === id ? { ...u, password: pw } : u));
   const updateUserExtension = (id: string, ext: string) => setUsers(prev => prev.map(u => u.id === id ? { ...u, extension: ext } : u));
   const updateUserProfileImage = (id: string, img: string) => setUsers(prev => prev.map(u => u.id === id ? { ...u, profileImage: img } : u));
-  
   const addSector = (name: string, costCenter: string) => setSectors(prev => [...prev, { id: crypto.randomUUID(), name, costCenter }]);
   const updateSector = (id: string, name: string, costCenter: string) => setSectors(prev => prev.map(s => s.id === id ? { ...s, name, costCenter } : s));
   const removeSector = (id: string) => setSectors(prev => prev.filter(s => s.id !== id));
-
   const addExtension = (ext: any) => setExtensions(prev => [...prev, { ...ext, id: crypto.randomUUID() }]);
   const updateExtension = (id: string, name: string, number: string, sector: string) => setExtensions(prev => prev.map(e => e.id === id ? { ...e, name, number, sector } : e));
   const removeExtension = (id: string) => setExtensions(prev => prev.filter(e => e.id !== id));
-
   const addGuide = (g: any) => setGuides(prev => [{ ...g, id: crypto.randomUUID(), createdAt: Date.now() }, ...prev]);
   const removeGuide = (id: string) => setGuides(prev => prev.filter(g => g.id !== id));
-
   const addSupportTicket = (t: any) => setSupportTickets(prev => [{ ...t, id: crypto.randomUUID(), status: SupportTicketStatus.PENDING, createdAt: Date.now() }, ...prev]);
   const processSupportTicket = (id: string, approve: boolean, priority: any = 'Média') => {
     const ticket = supportTickets.find(t => t.id === id);
     if (!ticket) return;
-    if (approve && ticket.category === 'MAINTENANCE') {
-      addWorkOrder({ title: `Chamado: ${ticket.title}`, description: ticket.description, priority, requesterName: ticket.requesterName }, false);
-    }
+    if (approve && ticket.category === 'MAINTENANCE') addWorkOrder({ title: `Chamado: ${ticket.title}`, description: ticket.description, priority, requesterName: ticket.requesterName }, false);
     setSupportTickets(prev => prev.map(t => t.id === id ? { ...t, status: approve ? SupportTicketStatus.APPROVED : SupportTicketStatus.REJECTED } : t));
   };
-
   const addEquipment = (eq: any) => setEquipments(prev => [...prev, { ...eq, id: crypto.randomUUID() }]);
   const removeEquipment = (id: string) => setEquipments(prev => prev.filter(e => e.id !== id));
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  const exportDatabase = () => {
+    const data = { inventory, workOrders, materialRequests, resourceRequests, purchaseOrders, usageLogs, stockEntries, users, sectors, extensions, guides, supportTickets, equipments };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `dutyfinder_intranet_backup.json`;
+    link.click();
+  };
+  const importDatabase = (jsonData: string) => {
+    try {
+      const data = JSON.parse(jsonData);
+      if (data.inventory) setInventory(data.inventory);
+      if (data.workOrders) setWorkOrders(data.workOrders);
+      if (data.materialRequests) setMaterialRequests(data.materialRequests);
+      if (data.resourceRequests) setResourceRequests(data.resourceRequests);
+      if (data.purchaseOrders) setPurchaseOrders(data.purchaseOrders);
+      if (data.usageLogs) setUsageLogs(data.usageLogs);
+      if (data.stockEntries) setStockEntries(data.stockEntries);
+      if (data.users) setUsers(data.users);
+      if (data.sectors) setSectors(data.sectors);
+      if (data.extensions) setExtensions(data.extensions);
+      if (data.guides) setGuides(data.guides);
+      if (data.supportTickets) setSupportTickets(data.supportTickets);
+      if (data.equipments) setEquipments(data.equipments);
+      alert("Importação concluída. Sincronizando com servidor...");
+    } catch (e) {
+      alert("Erro ao importar.");
+    }
+  };
 
   return (
     <AppContext.Provider value={{
-      inventory, workOrders, materialRequests, resourceRequests, purchaseOrders, usageLogs, stockEntries, users, sectors, extensions, guides, supportTickets, equipments, databaseConfig, theme,
+      inventory, workOrders, materialRequests, resourceRequests, purchaseOrders, usageLogs, stockEntries, users, sectors, extensions, guides, supportTickets, equipments, databaseConfig, theme, serverStatus,
       toggleTheme, updateDatabaseConfig, addWorkOrder, createMaterialRequest, processRequest, addResourceRequest, processResourceRequest, addPurchaseOrder, updatePurchaseStatus, completePurchaseReception,
       updateInventory, addInventoryItem, restockInventoryItem, updateWorkOrderStatus, reopenWorkOrder, addUser, removeUser, updateUserPassword, updateUserExtension, updateUserProfileImage,
-      addSector, updateSector, removeSector, addExtension, updateExtension, removeExtension, addGuide, removeGuide, addSupportTicket, processSupportTicket, addEquipment, removeEquipment, exportDatabase, importDatabase
+      addSector, updateSector, removeSector, addExtension, updateExtension, removeExtension, addGuide, removeGuide, addSupportTicket, processSupportTicket, addEquipment, removeEquipment, exportDatabase, importDatabase, refreshData
     }}>
       {children}
     </AppContext.Provider>

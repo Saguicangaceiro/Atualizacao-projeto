@@ -1,5 +1,8 @@
 {
-  "name": "Aplicaçao ",
-  "description": "Aplicação em desenvolvimento para o solicitação de materias e um sistema de ordem de serviço integrado",
-  "requestFramePermissions": []
+  "name": "DutyFinder Intranet",
+  "description": "Sistema de Ordem de Serviço e Estoque com Backend Python/MySQL",
+  "requestFramePermissions": [],
+  "permissions": [
+    "network"
+  ]
 }
