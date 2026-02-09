@@ -3,7 +3,16 @@ export interface Extension {
   name: string;
   number: string;
   sector: string;
-  userId?: string; // Opcional, se o ramal pertencer a um usuário específico
+  userId?: string; 
+}
+
+export interface MaintenanceGuide {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  createdAt: number;
+  authorName: string;
 }
 
 export interface InventoryItem {
@@ -13,6 +22,16 @@ export interface InventoryItem {
   quantity: number;
   unit: string;
   minThreshold: number;
+  sectorId?: string;
+}
+
+export interface Equipment {
+  id: string;
+  name: string;
+  code: string;
+  sectorId: string;
+  location: string;
+  description?: string;
 }
 
 export interface Sector {
@@ -32,6 +51,36 @@ export enum RequestStatus {
   PENDING = 'PENDENTE',
   APPROVED = 'APROVADO',
   REJECTED = 'REJEITADO'
+}
+
+export enum SupportTicketStatus {
+  PENDING = 'PENDENTE',
+  APPROVED = 'APROVADO',
+  REJECTED = 'REJEITADO'
+}
+
+export interface SupportTicket {
+  id: string;
+  category: 'MAINTENANCE' | 'IT';
+  title: string;
+  description: string;
+  requesterId: string;
+  requesterName: string;
+  sector: string;
+  status: SupportTicketStatus;
+  createdAt: number;
+  workOrderId?: string;
+}
+
+export interface DatabaseConfig {
+  type: 'LOCAL' | 'MYSQL_API';
+  host?: string;
+  port?: string;
+  user?: string;
+  password?: string;
+  database?: string;
+  apiUrl?: string;
+  status: 'CONNECTED' | 'DISCONNECTED' | 'LOCAL';
 }
 
 export interface MaterialRequestItem {
@@ -104,6 +153,7 @@ export interface WorkOrder {
   priority: 'Baixa' | 'Média' | 'Alta';
   status: WorkOrderStatus;
   requesterName: string;
+  equipmentId?: string;
   createdAt: number;
   requests: string[];
   history: WorkOrderHistoryEntry[];
@@ -140,5 +190,6 @@ export interface User {
   role: UserRole;
   hasPortalAccess?: boolean;
   extension?: string; 
-  sectorId?: string; // Vínculo com o setor/centro de custo
+  sectorId?: string;
+  profileImage?: string;
 }

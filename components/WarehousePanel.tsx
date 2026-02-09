@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Package, CheckCircle, XCircle, ClipboardList, History, AlertTriangle, PlusCircle, FileText, Box, Tag, Building, User, Truck, ArrowDownCircle } from 'lucide-react';
+import { Package, CheckCircle, XCircle, ClipboardList, History, AlertTriangle, PlusCircle, FileText, Box, Tag, Building, User, Truck, ArrowDownCircle, Search, Filter } from 'lucide-react';
 import { RequestStatus, User as UserType } from '../types';
 
 interface WarehousePanelProps {
@@ -13,6 +13,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({ currentUser }) =
     materialRequests, 
     resourceRequests, 
     purchaseOrders,
+    sectors,
     processRequest, 
     processResourceRequest, 
     usageLogs, 
@@ -42,9 +43,14 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({ currentUser }) =
   const [newItemQty, setNewItemQty] = useState('');
   const [newItemUnit, setNewItemUnit] = useState('');
   const [newItemCategory, setNewItemCategory] = useState('');
+  const [newItemSectorId, setNewItemSectorId] = useState('');
 
   // Restock State
   const [restockQty, setRestockQty] = useState('');
+
+  // Inventory Filter State
+  const [inventorySearch, setInventorySearch] = useState('');
+  const [sectorFilter, setSectorFilter] = useState('');
 
   const pendingRequests = materialRequests.filter(r => r.status === RequestStatus.PENDING);
   const pendingResources = resourceRequests.filter(r => r.status === 'PENDENTE');
@@ -55,6 +61,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({ currentUser }) =
     setNewItemQty('');
     setNewItemUnit('');
     setNewItemCategory('');
+    setNewItemSectorId('');
     setRestockQty('');
     setPurchaseId('');
     setInvoice('');
@@ -72,6 +79,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({ currentUser }) =
       quantity: Number(newItemQty),
       unit: newItemUnit,
       category: newItemCategory,
+      sectorId: newItemSectorId || undefined,
       minThreshold: 5
     }, {
       purchaseId,
@@ -111,50 +119,48 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({ currentUser }) =
 
   // Helper for compliance fields rendering
   const renderComplianceFields = () => (
-    <>
-      <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg border border-gray-200 dark:border-gray-600 space-y-3">
-        <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Dados da Compra</h4>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">ID da Compra *</label>
-          <input 
-            required 
-            type="text" 
-            placeholder="Ex: CMP-2024-001"
-            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-700 dark:text-white" 
-            value={purchaseId} 
-            onChange={e => setPurchaseId(e.target.value)} 
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-            <FileText className="w-3 h-3" /> Nota Fiscal (Opcional)
-          </label>
-          <input 
-            type="text" 
-            placeholder="Número da NF"
-            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-700 dark:text-white" 
-            value={invoice} 
-            onChange={e => setInvoice(e.target.value)} 
-          />
-        </div>
-
-        {!invoice && (
-          <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-            <label className="block text-sm font-bold text-orange-600 dark:text-orange-400 mb-1">Motivo da falta de NF *</label>
-            <textarea 
-              required
-              rows={2}
-              placeholder="Explique por que não há nota fiscal..."
-              className="w-full border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none placeholder-orange-300 text-orange-800 dark:text-orange-200"
-              value={noInvoiceReason}
-              onChange={e => setNoInvoiceReason(e.target.value)}
-            />
-            <p className="text-xs text-orange-500 mt-1">Este campo é obrigatório quando não há Nota Fiscal.</p>
-          </div>
-        )}
+    <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg border border-gray-200 dark:border-gray-600 space-y-3">
+      <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Dados da Compra</h4>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">ID da Compra *</label>
+        <input 
+          required 
+          type="text" 
+          placeholder="Ex: CMP-2024-001"
+          className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-700 dark:text-white" 
+          value={purchaseId} 
+          onChange={e => setPurchaseId(e.target.value)} 
+        />
       </div>
-    </>
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+          <FileText className="w-3 h-3" /> Nota Fiscal (Opcional)
+        </label>
+        <input 
+          type="text" 
+          placeholder="Número da NF"
+          className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-700 dark:text-white" 
+          value={invoice} 
+          onChange={e => setInvoice(e.target.value)} 
+        />
+      </div>
+
+      {!invoice && (
+        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+          <label className="block text-sm font-bold text-orange-600 dark:text-orange-400 mb-1">Motivo da falta de NF *</label>
+          <textarea 
+            required
+            rows={2}
+            placeholder="Explique por que não há nota fiscal..."
+            className="w-full border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none placeholder-orange-300 text-orange-800 dark:text-orange-200"
+            value={noInvoiceReason}
+            onChange={e => setNoInvoiceReason(e.target.value)}
+          />
+          <p className="text-xs text-orange-500 mt-1">Este campo é obrigatório quando não há Nota Fiscal.</p>
+        </div>
+      )}
+    </div>
   );
 
   const renderRequests = () => (
@@ -266,7 +272,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({ currentUser }) =
                       {po.items.map(item => {
                          const match = inventory.find(i => i.name.toLowerCase().trim() === item.name.toLowerCase().trim());
                          return (
-                            <li key={item.id} className="flex justify-between items-center text-sm border-b border-blue-100 dark:border-blue-900/30 last:border-0 pb-1 last:pb-0">
+                            <li key={item.id} className="flex justify-between items-center text-sm border-b border-blue-100 dark:border-blue-900/30 last:border-0 pb-1.5 last:pb-0">
                                <div>
                                   <span className="font-medium text-gray-800 dark:text-gray-200">{item.name}</span>
                                   {match ? (
@@ -418,63 +424,125 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({ currentUser }) =
     </div>
   );
 
-  const renderInventory = () => (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-          <Package className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-          Gerenciamento de Estoque
-        </h2>
-        <button 
-          onClick={() => setShowAddModal(true)}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition shadow-sm"
-        >
-          + Novo Item
-        </button>
-      </div>
+  const renderInventory = () => {
+    const filteredInventory = inventory.filter(item => {
+      const matchesSearch = item.name.toLowerCase().includes(inventorySearch.toLowerCase());
+      const matchesSector = sectorFilter === '' || item.sectorId === sectorFilter;
+      return matchesSearch && matchesSector;
+    });
 
-      <div className="bg-white dark:bg-gray-800 shadow-sm rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm uppercase tracking-wider border-b border-gray-200 dark:border-gray-600">
-              <th className="p-4 font-semibold">Item</th>
-              <th className="p-4 font-semibold">Categoria</th>
-              <th className="p-4 font-semibold text-right">Qtd Atual</th>
-              <th className="p-4 font-semibold text-center">Status</th>
-              <th className="p-4 font-semibold text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-            {inventory.map(item => (
-              <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                <td className="p-4 font-medium text-gray-900 dark:text-gray-100">{item.name}</td>
-                <td className="p-4 text-gray-500 dark:text-gray-400">{item.category}</td>
-                <td className="p-4 text-right font-mono text-gray-700 dark:text-gray-300">{item.quantity} <span className="text-xs text-gray-400">{item.unit}</span></td>
-                <td className="p-4 text-center">
-                   {item.quantity <= item.minThreshold ? (
-                     <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2 py-1 rounded-full">
-                       <AlertTriangle className="w-3 h-3" /> Baixo
-                     </span>
-                   ) : (
-                    <span className="text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded-full">OK</span>
-                   )}
-                </td>
-                <td className="p-4 text-right">
-                  <button 
-                    onClick={() => openRestockModal(item)}
-                    className="text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 p-2 rounded-full transition"
-                    title="Adicionar Estoque"
-                  >
-                    <PlusCircle className="w-5 h-5" />
-                  </button>
-                </td>
+    return (
+      <div>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+          <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+            <Package className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+            Gerenciamento de Estoque
+          </h2>
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition shadow-sm w-full md:w-auto"
+          >
+            + Novo Item
+          </button>
+        </div>
+
+        {/* Inventory Filters */}
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6 flex flex-col md:flex-row gap-4 items-center">
+          <div className="relative flex-1 w-full">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Buscar item pelo nome..." 
+              className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm outline-none bg-white dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-indigo-500"
+              value={inventorySearch}
+              onChange={e => setInventorySearch(e.target.value)}
+            />
+          </div>
+          <div className="relative w-full md:w-64">
+            <Filter className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+            <select 
+              className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm outline-none bg-white dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-indigo-500 appearance-none"
+              value={sectorFilter}
+              onChange={e => setSectorFilter(e.target.value)}
+            >
+              <option value="">Todos os Setores</option>
+              {sectors.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          {(inventorySearch || sectorFilter) && (
+            <button 
+              onClick={() => { setInventorySearch(''); setSectorFilter(''); }}
+              className="text-xs text-red-500 hover:text-red-700 font-bold whitespace-nowrap"
+            >
+              Limpar Filtros
+            </button>
+          )}
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 shadow-sm rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm uppercase tracking-wider border-b border-gray-200 dark:border-gray-600">
+                <th className="p-4 font-semibold">Item</th>
+                <th className="p-4 font-semibold">Categoria</th>
+                <th className="p-4 font-semibold">Setor</th>
+                <th className="p-4 font-semibold text-right">Qtd Atual</th>
+                <th className="p-4 font-semibold text-center">Status</th>
+                <th className="p-4 font-semibold text-right">Ações</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              {filteredInventory.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-gray-400 dark:text-gray-500 italic">Nenhum item encontrado com os filtros aplicados.</td>
+                </tr>
+              ) : (
+                filteredInventory.map(item => {
+                  const itemSector = sectors.find(s => s.id === item.sectorId);
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                      <td className="p-4 font-medium text-gray-900 dark:text-gray-100">{item.name}</td>
+                      <td className="p-4 text-gray-500 dark:text-gray-400">{item.category}</td>
+                      <td className="p-4">
+                        {itemSector ? (
+                          <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-0.5 rounded-full border border-indigo-100 dark:border-indigo-800">
+                            {itemSector.name}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">Geral</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-right font-mono text-gray-700 dark:text-gray-300">{item.quantity} <span className="text-xs text-gray-400">{item.unit}</span></td>
+                      <td className="p-4 text-center">
+                         {item.quantity <= item.minThreshold ? (
+                           <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2 py-1 rounded-full">
+                             <AlertTriangle className="w-3 h-3" /> Baixo
+                           </span>
+                         ) : (
+                          <span className="text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded-full">OK</span>
+                         )}
+                      </td>
+                      <td className="p-4 text-right">
+                        <button 
+                          onClick={() => openRestockModal(item)}
+                          className="text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 p-2 rounded-full transition"
+                          title="Adicionar Estoque"
+                        >
+                          <PlusCircle className="w-5 h-5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderLogs = () => (
     <div>
@@ -566,7 +634,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({ currentUser }) =
   return (
     <div className="p-6">
       {/* Navigation Tabs */}
-      <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6 overflow-x-auto">
+      <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6 overflow-x-auto scrollbar-hide">
         <button
           onClick={() => setActiveTab('REQUESTS')}
           className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
@@ -658,18 +726,29 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({ currentUser }) =
                   <input required type="text" placeholder="un, kg, L" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white" value={newItemUnit} onChange={e => setNewItemUnit(e.target.value)} />
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria</label>
-                <select className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white" value={newItemCategory} onChange={e => setNewItemCategory(e.target.value)}>
-                  <option value="">Selecione...</option>
-                  <option value="Elétrica">Elétrica</option>
-                  <option value="Hidráulica">Hidráulica</option>
-                  <option value="Mecânica">Mecânica</option>
-                  <option value="Civil">Civil</option>
-                  <option value="EPI">EPI</option>
-                  <option value="Ferramentas">Ferramentas</option>
-                  <option value="Outros">Outros</option>
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria</label>
+                  <select className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white" value={newItemCategory} onChange={e => setNewItemCategory(e.target.value)}>
+                    <option value="">Selecione...</option>
+                    <option value="Elétrica">Elétrica</option>
+                    <option value="Hidráulica">Hidráulica</option>
+                    <option value="Mecânica">Mecânica</option>
+                    <option value="Civil">Civil</option>
+                    <option value="EPI">EPI</option>
+                    <option value="Ferramentas">Ferramentas</option>
+                    <option value="Outros">Outros</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Setor</label>
+                  <select className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white" value={newItemSectorId} onChange={e => setNewItemSectorId(e.target.value)}>
+                    <option value="">Geral</option>
+                    {sectors.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {renderComplianceFields()}
