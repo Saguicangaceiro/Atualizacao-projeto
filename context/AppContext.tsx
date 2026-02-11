@@ -81,7 +81,6 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const API_BASE = "http://localhost:5000/api";
 
-// Usuário padrão caso o banco esteja vazio
 const DEFAULT_ADMIN: User = {
   id: 'default-admin',
   username: 'admin',
@@ -126,12 +125,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const res = await fetch(`${API_BASE}/load/${entity}`);
       if (res.ok) {
         const data = await res.json();
-        return Array.isArray(data) ? data : null;
+        return Array.isArray(data) ? data : [];
       }
     } catch (e) {
-      // Falha silenciosa para não quebrar o app
+      // Falha silenciosa
     }
-    return null;
+    return [];
   };
 
   const refreshData = useCallback(async () => {
@@ -145,7 +144,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       { key: 'purchase_orders', setter: setPurchaseOrders },
       { key: 'usage_logs', setter: setUsageLogs },
       { key: 'stock_entries', setter: setStockEntries },
-      { key: 'users', setter: (data: User[]) => setUsers(data.length > 0 ? data : [DEFAULT_ADMIN]) },
+      { key: 'users', setter: (data: User[]) => setUsers(data && data.length > 0 ? data : [DEFAULT_ADMIN]) },
       { key: 'sectors', setter: setSectors },
       { key: 'extensions', setter: setExtensions },
       { key: 'guides', setter: setGuides },
@@ -176,7 +175,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => clearInterval(interval);
   }, [refreshData]);
 
-  // UseEffects para salvar (apenas se houver mudanças e servidor online)
+  // UseEffects para salvar
   useEffect(() => { if(inventory.length) apiSave('inventory', inventory); }, [inventory]);
   useEffect(() => { if(workOrders.length) apiSave('work_orders', workOrders); }, [workOrders]);
   useEffect(() => { if(materialRequests.length) apiSave('material_requests', materialRequests); }, [materialRequests]);
@@ -184,7 +183,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { if(purchaseOrders.length) apiSave('purchase_orders', purchaseOrders); }, [purchaseOrders]);
   useEffect(() => { if(usageLogs.length) apiSave('usage_logs', usageLogs); }, [usageLogs]);
   useEffect(() => { if(stockEntries.length) apiSave('stock_entries', stockEntries); }, [stockEntries]);
-  useEffect(() => { if(users.length > 1) apiSave('users', users); }, [users]); // > 1 para não salvar o default-admin sozinho
+  useEffect(() => { if(users.length > 1) apiSave('users', users); }, [users]);
   useEffect(() => { if(sectors.length) apiSave('sectors', sectors); }, [sectors]);
   useEffect(() => { if(extensions.length) apiSave('extensions', extensions); }, [extensions]);
   useEffect(() => { if(guides.length) apiSave('guides', guides); }, [guides]);
@@ -207,7 +206,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         alert("Erro: " + result.message);
       }
     } catch (e) {
-      alert("Falha ao conectar ao servidor backend Python. Verifique se o server.py está rodando.");
+      alert("Falha ao conectar ao servidor backend Python.");
     }
   };
 
@@ -367,7 +366,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (data.guides) setGuides(data.guides);
       if (data.supportTickets) setSupportTickets(data.supportTickets);
       if (data.equipments) setEquipments(data.equipments);
-      alert("Importação concluída. Sincronizando com servidor...");
+      alert("Importação concluída.");
     } catch (e) {
       alert("Erro ao importar.");
     }
