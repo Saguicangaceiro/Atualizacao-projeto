@@ -79,8 +79,16 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// URL do Servidor Python na Intranet (Pode ser alterado para o IP do servidor)
 const API_BASE = "http://localhost:5000/api";
+
+// Usuário padrão caso o banco esteja vazio
+const DEFAULT_ADMIN: User = {
+  id: 'default-admin',
+  username: 'admin',
+  password: 'admin',
+  name: 'Administrador do Sistema',
+  role: 'SUPER_ADMIN'
+};
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -90,7 +98,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [usageLogs, setUsageLogs] = useState<UsageLog[]>([]);
   const [stockEntries, setStockEntries] = useState<StockEntryLog[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<User[]>([DEFAULT_ADMIN]);
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [extensions, setExtensions] = useState<Extension[]>([]);
   const [guides, setGuides] = useState<MaintenanceGuide[]>([]);
@@ -100,8 +108,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [serverStatus, setServerStatus] = useState<'ONLINE' | 'OFFLINE' | 'CONNECTING'>('CONNECTING');
   const [databaseConfig, setDatabaseConfig] = useState<DatabaseConfig>({ type: 'LOCAL', status: 'LOCAL' });
 
-  // Funções de API
   const apiSave = async (entity: string, data: any) => {
+    if (serverStatus !== 'ONLINE' && serverStatus !== 'CONNECTING') return;
     try {
       await fetch(`${API_BASE}/save/${entity}`, {
         method: 'POST',
@@ -109,7 +117,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         body: JSON.stringify(data)
       });
     } catch (e) {
-      console.error(`Falha ao salvar ${entity} no servidor:`, e);
       setServerStatus('OFFLINE');
     }
   };
@@ -117,15 +124,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const apiLoad = async (entity: string) => {
     try {
       const res = await fetch(`${API_BASE}/load/${entity}`);
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        const data = await res.json();
+        return Array.isArray(data) ? data : null;
+      }
     } catch (e) {
-      setServerStatus('OFFLINE');
+      // Falha silenciosa para não quebrar o app
     }
     return null;
   };
 
   const refreshData = useCallback(async () => {
     setServerStatus('CONNECTING');
+    
     const entities = [
       { key: 'inventory', setter: setInventory },
       { key: 'work_orders', setter: setWorkOrders },
@@ -134,7 +145,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       { key: 'purchase_orders', setter: setPurchaseOrders },
       { key: 'usage_logs', setter: setUsageLogs },
       { key: 'stock_entries', setter: setStockEntries },
-      { key: 'users', setter: setUsers },
+      { key: 'users', setter: (data: User[]) => setUsers(data.length > 0 ? data : [DEFAULT_ADMIN]) },
       { key: 'sectors', setter: setSectors },
       { key: 'extensions', setter: setExtensions },
       { key: 'guides', setter: setGuides },
@@ -142,25 +153,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       { key: 'equipments', setter: setEquipments }
     ];
 
-    let allOk = true;
-    for (const entity of entities) {
-      const data = await apiLoad(entity.key);
-      if (data) entity.setter(data);
-      else allOk = false;
+    try {
+      const healthCheck = await fetch(`${API_BASE}/health`).catch(() => null);
+      if (!healthCheck || !healthCheck.ok) {
+        setServerStatus('OFFLINE');
+        return;
+      }
+
+      for (const entity of entities) {
+        const data = await apiLoad(entity.key);
+        if (data) entity.setter(data);
+      }
+      setServerStatus('ONLINE');
+    } catch (e) {
+      setServerStatus('OFFLINE');
     }
-    
-    if (allOk) setServerStatus('ONLINE');
-    else setServerStatus('OFFLINE');
   }, []);
 
   useEffect(() => {
     refreshData();
-    // Pooling para manter dados atualizados na intranet a cada 30 segundos
     const interval = setInterval(refreshData, 30000);
     return () => clearInterval(interval);
   }, [refreshData]);
 
-  // Wrappers para persistência automática
+  // UseEffects para salvar (apenas se houver mudanças e servidor online)
   useEffect(() => { if(inventory.length) apiSave('inventory', inventory); }, [inventory]);
   useEffect(() => { if(workOrders.length) apiSave('work_orders', workOrders); }, [workOrders]);
   useEffect(() => { if(materialRequests.length) apiSave('material_requests', materialRequests); }, [materialRequests]);
@@ -168,7 +184,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { if(purchaseOrders.length) apiSave('purchase_orders', purchaseOrders); }, [purchaseOrders]);
   useEffect(() => { if(usageLogs.length) apiSave('usage_logs', usageLogs); }, [usageLogs]);
   useEffect(() => { if(stockEntries.length) apiSave('stock_entries', stockEntries); }, [stockEntries]);
-  useEffect(() => { if(users.length) apiSave('users', users); }, [users]);
+  useEffect(() => { if(users.length > 1) apiSave('users', users); }, [users]); // > 1 para não salvar o default-admin sozinho
   useEffect(() => { if(sectors.length) apiSave('sectors', sectors); }, [sectors]);
   useEffect(() => { if(extensions.length) apiSave('extensions', extensions); }, [extensions]);
   useEffect(() => { if(guides.length) apiSave('guides', guides); }, [guides]);
@@ -191,11 +207,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         alert("Erro: " + result.message);
       }
     } catch (e) {
-      alert("Falha ao conectar ao servidor backend Python.");
+      alert("Falha ao conectar ao servidor backend Python. Verifique se o server.py está rodando.");
     }
   };
 
-  // Funções de Negócio (Adaptadas para chamadas de estado que disparam useEffects de API)
   const addWorkOrder = (woData: any, needsMaterials: boolean) => {
     const initialStatus = needsMaterials ? WorkOrderStatus.PREPARATION : WorkOrderStatus.IN_PROGRESS;
     const newWO: WorkOrder = {
