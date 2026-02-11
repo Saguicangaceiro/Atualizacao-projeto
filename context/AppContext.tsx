@@ -20,7 +20,7 @@ import {
   SupportTicketStatus,
   DatabaseConfig,
   Equipment
-} from '../types';
+} from '../types.ts';
 
 interface AppContextType {
   inventory: InventoryItem[];
@@ -107,6 +107,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [serverStatus, setServerStatus] = useState<'ONLINE' | 'OFFLINE' | 'CONNECTING'>('CONNECTING');
   const [databaseConfig, setDatabaseConfig] = useState<DatabaseConfig>({ type: 'LOCAL', status: 'LOCAL' });
 
+  // Aplica o tema ao elemento HTML
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
   const apiSave = async (entity: string, data: any) => {
     if (serverStatus !== 'ONLINE' && serverStatus !== 'CONNECTING') return;
     try {
@@ -128,7 +137,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return Array.isArray(data) ? data : [];
       }
     } catch (e) {
-      // Falha silenciosa
+      console.warn(`Erro ao carregar entidade ${entity}:`, e);
     }
     return [];
   };
@@ -386,6 +395,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
 export const useApp = () => {
   const context = useContext(AppContext);
-  if (!context) throw new Error("useApp must be used within AppProvider");
+  if (!context) throw new Error("useApp deve ser usado dentro de AppProvider");
   return context;
 };

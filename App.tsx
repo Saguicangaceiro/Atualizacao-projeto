@@ -1,20 +1,21 @@
+
 /**
  * DutyFinder Service Manager
  * Developed by Antônio Marcos
  */
 import React, { useState } from 'react';
-import { AppProvider, useApp } from './context/AppContext';
-import { MaintenancePanel } from './components/MaintenancePanel';
-import { WarehousePanel } from './components/WarehousePanel';
-import { AdminPanel } from './components/AdminPanel';
-import { UserPanel } from './components/UserPanel';
-import { PurchasingPanel } from './components/PurchasingPanel';
-import { GatehousePanel } from './components/GatehousePanel';
-import { ITPanel } from './components/ITPanel';
-import { Dashboard } from './components/Dashboard';
-import { LoginScreen } from './components/LoginScreen';
-import { Settings, Users, LogOut, PenTool, Box, Shield, Crown, User as UserIcon, ShoppingBag, Code, Moon, Sun, LayoutDashboard, Truck, Monitor, BarChart3 } from 'lucide-react';
-import { User } from './types';
+import { AppProvider, useApp } from './context/AppContext.tsx';
+import { MaintenancePanel } from './components/MaintenancePanel.tsx';
+import { WarehousePanel } from './components/WarehousePanel.tsx';
+import { AdminPanel } from './components/AdminPanel.tsx';
+import { UserPanel } from './components/UserPanel.tsx';
+import { PurchasingPanel } from './components/PurchasingPanel.tsx';
+import { GatehousePanel } from './components/GatehousePanel.tsx';
+import { ITPanel } from './components/ITPanel.tsx';
+import { Dashboard } from './components/Dashboard.tsx';
+import { LoginScreen } from './components/LoginScreen.tsx';
+import { Settings, LogOut, Shield, Crown, User as UserIcon, Code, Moon, Sun, LayoutDashboard, BarChart3, Monitor, Box } from 'lucide-react';
+import { User } from './types.ts';
 
 const AppContent: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
