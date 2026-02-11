@@ -19,14 +19,14 @@ try {
       <App />
     </React.StrictMode>
   );
-  
-  // Remove o loader assim que o React começar a montar
-  if (loaderElement) {
-    loaderElement.style.display = 'none';
-  }
 } catch (error) {
   console.error("Erro crítico na montagem do React:", error);
   if (loaderElement) {
     loaderElement.innerHTML = `<p style="color: red; padding: 20px;">Erro ao carregar o sistema. Verifique o console do navegador (F12).</p>`;
   }
+} finally {
+  // Pequeno delay para garantir que o React começou a renderizar
+  setTimeout(() => {
+    if (loaderElement) loaderElement.style.display = 'none';
+  }, 500);
 }
