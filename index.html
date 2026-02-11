@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DutyFinder Service Manager</title>
     
-    <!-- Scripts de Estilo e Transpilação -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
@@ -16,9 +15,7 @@
         theme: {
           extend: {
             colors: {
-              brand: {
-                50: '#f0f9ff', 500: '#0ea5e9', 600: '#0284c7', 900: '#0c4a6e',
-              }
+              brand: { 50: '#f0f9ff', 500: '#0ea5e9', 600: '#0284c7', 900: '#0c4a6e' }
             }
           }
         }
@@ -29,10 +26,9 @@
 {
   "imports": {
     "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "react": "https://esm.sh/react@^19.2.4",
-    "react-dom": "https://esm.sh/react-dom@^19.2.4",
-    "react-dom/client": "https://esm.sh/react-dom@^19.2.4/client",
-    "@google/genai": "https://esm.sh/@google/genai@^1.40.0",
+    "react": "https://esm.sh/react@19",
+    "react-dom": "https://esm.sh/react-dom@19",
+    "react-dom/client": "https://esm.sh/react-dom@19/client",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
     "react/": "https://esm.sh/react@^19.2.4/"
   }
@@ -44,6 +40,7 @@
         position: fixed; inset: 0;
         display: flex; flex-direction: column; align-items: center; justify-content: center;
         background: #111827; color: white; z-index: 9999; font-family: sans-serif;
+        transition: opacity 0.5s ease;
       }
       .spinner {
         width: 40px; height: 40px; border: 4px solid #374151; border-top: 4px solid #3b82f6;
@@ -55,33 +52,22 @@
   <body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-200">
     <div id="loader">
       <div class="spinner"></div>
-      <p id="loader-text">Iniciando DutyFinder...</p>
+      <p id="loader-text">Compilando sistema DutyFinder...</p>
     </div>
     
     <div id="root"></div>
     
-    <!-- O script agora é do tipo text/babel para o BabelStandalone processar o JSX/TSX -->
     <script type="text/babel" data-type="module" data-presets="react,typescript" src="index.tsx"></script>
 
     <script>
-      // Fallback: Se em 5 segundos o loader ainda estiver visível,
-      // algo deu errado no carregamento dos scripts.
+      // Fallback de carregamento
       setTimeout(() => {
         const loader = document.getElementById('loader');
-        const loaderText = document.getElementById('loader-text');
         if (loader && loader.style.display !== 'none') {
-          console.warn("DutyFinder: O carregamento está demorando mais que o esperado.");
-          loaderText.innerHTML = "O servidor está demorando a responder.<br><small>Verifique se o XAMPP e o server.py estão ativos.</small>";
-          
-          // Forçar encerramento do loader após 10 segundos para não travar a tela
-          setTimeout(() => {
-            if (loader.style.display !== 'none') {
-              loader.style.opacity = '0.5';
-              loaderText.innerHTML = "Erro de conexão detectado. Tente recarregar a página (F5).";
-            }
-          }, 5000);
+          const text = document.getElementById('loader-text');
+          text.innerHTML = "O sistema está demorando para iniciar.<br><small>Verifique se o server.py e o XAMPP/MySQL estão ligados.</small>";
         }
-      }, 5000);
+      }, 8000);
     </script>
   </body>
 </html>

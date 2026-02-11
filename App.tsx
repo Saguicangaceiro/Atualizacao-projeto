@@ -15,39 +15,25 @@ import { ITPanel } from './components/ITPanel.tsx';
 import { Dashboard } from './components/Dashboard.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { Settings, LogOut, Shield, Crown, User as UserIcon, Code, Moon, Sun, LayoutDashboard, BarChart3, Monitor, Box } from 'lucide-react';
-import { User } from './types.ts';
 
 const AppContent: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [adminViewMode, setAdminViewMode] = useState<'ADMIN' | 'USER' | 'IT' | 'DASHBOARD'>('DASHBOARD');
+  // Simplificado para evitar erros de parser do Babel Standalone
+  const [currentUser, setCurrentUser] = useState(null);
+  const [adminViewMode, setAdminViewMode] = useState('DASHBOARD');
   const { theme, toggleTheme, users } = useApp();
 
-  // Remove o loader do HTML assim que o React montar
   useEffect(() => {
     const loader = document.getElementById('loader');
     if (loader) {
-      loader.style.display = 'none';
+      loader.style.opacity = '0';
+      setTimeout(() => { loader.style.display = 'none'; }, 500);
     }
   }, []);
 
   const currentSyncedUser = currentUser ? users.find(u => u.id === currentUser.id) || currentUser : null;
 
-  const handleLogin = (user: User) => {
-    setCurrentUser(user);
-    if (user.role === 'USER') {
-      setAdminViewMode('USER');
-    } else {
-      setAdminViewMode('DASHBOARD');
-    }
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    setAdminViewMode('DASHBOARD');
-  };
-
   if (!currentSyncedUser) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return <LoginScreen onLogin={(user) => setCurrentUser(user)} />;
   }
 
   const isAdmin = currentSyncedUser.role === 'IT_ADMIN' || currentSyncedUser.role === 'SUPER_ADMIN';
@@ -95,8 +81,6 @@ const AppContent: React.FC = () => {
     return <Settings className="w-6 h-6 text-white" />;
   };
 
-  const showPortalToggle = currentSyncedUser.role !== 'USER';
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col font-sans transition-colors duration-200">
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30 shadow-sm">
@@ -116,7 +100,7 @@ const AppContent: React.FC = () => {
               </button>
             )}
 
-            {showPortalToggle && (
+            {currentSyncedUser.role !== 'USER' && (
               <button onClick={() => setAdminViewMode(adminViewMode === 'USER' ? 'ADMIN' : 'USER')} className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border border-teal-200 text-teal-700">
                 {adminViewMode === 'USER' ? <LayoutDashboard className="w-4 h-4" /> : <Box className="w-4 h-4" />}
                 {adminViewMode === 'USER' ? 'Painel' : 'Portal'}
@@ -134,7 +118,7 @@ const AppContent: React.FC = () => {
                <span className="font-bold hidden sm:inline">{currentSyncedUser.name.split(' ')[0]}</span>
             </div>
 
-            <button onClick={handleLogout} className="text-gray-400 hover:text-red-600 p-2"><LogOut className="w-5 h-5" /></button>
+            <button onClick={() => setCurrentUser(null)} className="text-gray-400 hover:text-red-600 p-2"><LogOut className="w-5 h-5" /></button>
           </div>
         </div>
       </header>

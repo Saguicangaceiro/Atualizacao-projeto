@@ -7,16 +7,13 @@ from flask_cors import CORS
 import mysql.connector
 from mysql.connector import Error
 
-# Garante que o Windows reconheça arquivos TS e TSX como Javascript
-mimetypes.add_type('application/javascript', '.ts')
-mimetypes.add_type('application/javascript', '.tsx')
-
+# Diretório base do projeto
 base_dir = os.path.abspath(os.path.dirname(__file__))
 
 app = Flask(__name__, static_folder=base_dir)
 CORS(app)
 
-# Configuração do Banco de Dados
+# Configuração do Banco de Dados MySQL
 db_config = {
     'host': 'localhost',
     'user': 'root',
@@ -55,24 +52,45 @@ def init_db():
             """)
             conn.commit()
             conn.close()
-            print(f"[OK] Banco de dados '{db_config['database']}' está ativo.")
+            print(f"[OK] Banco de dados '{db_config['database']}' pronto para uso.")
             return True
     except Exception as e:
-        print(f"[AVISO] Servidor MySQL (XAMPP) não detectado. O sistema usará armazenamento local temporário. Erro: {e}")
+        print(f"[AVISO] MySQL não detectado (XAMPP desligado?). Usando armazenamento local. Erro: {e}")
         return False
 
+# ROTA RAIZ
 @app.route('/')
 def serve_index():
     return send_from_directory(base_dir, 'index.html')
 
+# SERVIDOR DE ARQUIVOS ESTÁTICOS COM MIME TYPES EXPLÍCITOS
 @app.route('/<path:path>')
 def serve_static(path):
-    # Se o arquivo não existir, tenta servir o index (útil para rotas SPA)
-    if not os.path.exists(os.path.join(base_dir, path)):
+    full_path = os.path.join(base_dir, path)
+    
+    # Se o arquivo não existir fisicamente, assume que é uma rota do React e manda o index.html
+    if not os.path.exists(full_path):
         return send_from_directory(base_dir, 'index.html')
-    return send_from_directory(base_dir, path)
+    
+    # Define o MIME Type manualmente para evitar erros no Windows
+    ext = os.path.splitext(path)[1].lower()
+    mimetype_map = {
+        '.tsx': 'application/javascript',
+        '.ts': 'application/javascript',
+        '.js': 'application/javascript',
+        '.json': 'application/json',
+        '.css': 'text/css',
+        '.html': 'text/html',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.svg': 'image/svg+xml'
+    }
+    
+    mimetype = mimetype_map.get(ext)
+    return send_from_directory(base_dir, path, mimetype=mimetype)
 
-# API
+# API ENDPOINTS
 @app.route('/api/health', methods=['GET'])
 def health():
     db_conn = get_db_connection()
@@ -112,8 +130,9 @@ def save_entity(entity):
 
 if __name__ == '__main__':
     init_db()
-    print("\n" + "="*50)
-    print(" SERVIDOR DUTYFINDER ONLINE")
+    print("\n" + "="*60)
+    print(" SERVIDOR DUTYFINDER ATIVO E CORRIGIDO")
+    print(f" Caminho base: {base_dir}")
     print(" ACESSE: http://localhost:5000")
-    print("="*50 + "\n")
+    print("="*60 + "\n")
     app.run(host='0.0.0.0', port=5000, debug=False)
