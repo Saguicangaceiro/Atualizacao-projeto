@@ -1,12 +1,16 @@
 
 import os
 import json
+import mimetypes
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import mysql.connector
 from mysql.connector import Error
 
-# Define a pasta raiz como o local onde o script server.py está
+# Garante que o Windows reconheça arquivos TS e TSX como Javascript
+mimetypes.add_type('application/javascript', '.ts')
+mimetypes.add_type('application/javascript', '.tsx')
+
 base_dir = os.path.abspath(os.path.dirname(__file__))
 
 app = Flask(__name__, static_folder=base_dir)
@@ -24,11 +28,11 @@ def get_db_connection():
     try:
         connection = mysql.connector.connect(**db_config)
         return connection
-    except Error as e:
+    except Error:
         return None
 
 def init_db():
-    print(f"[*] Tentando conectar ao MySQL em {db_config['host']}...")
+    print(f"[*] Verificando MySQL em {db_config['host']}...")
     try:
         conn = mysql.connector.connect(
             host=db_config['host'],
@@ -51,28 +55,31 @@ def init_db():
             """)
             conn.commit()
             conn.close()
-            print(f"[OK] Banco de dados '{db_config['database']}' pronto.")
+            print(f"[OK] Banco de dados '{db_config['database']}' está ativo.")
             return True
     except Exception as e:
-        print(f"[AVISO] MySQL inacessível. Verifique o XAMPP. Erro: {e}")
+        print(f"[AVISO] Servidor MySQL (XAMPP) não detectado. O sistema usará armazenamento local temporário. Erro: {e}")
         return False
 
-# ROTAS DE ARQUIVOS (FRONTEND)
 @app.route('/')
 def serve_index():
     return send_from_directory(base_dir, 'index.html')
 
 @app.route('/<path:path>')
-def serve_files(path):
-    if os.path.exists(os.path.join(base_dir, path)):
-        return send_from_directory(base_dir, path)
-    return jsonify({"error": "Arquivo nao encontrado", "path": path}), 404
+def serve_static(path):
+    # Se o arquivo não existir, tenta servir o index (útil para rotas SPA)
+    if not os.path.exists(os.path.join(base_dir, path)):
+        return send_from_directory(base_dir, 'index.html')
+    return send_from_directory(base_dir, path)
 
-# ROTAS DE API (BACKEND)
+# API
 @app.route('/api/health', methods=['GET'])
 def health():
-    db_status = "CONNECTED" if get_db_connection() else "DISCONNECTED"
-    return jsonify({"status": "ONLINE", "database": db_status})
+    db_conn = get_db_connection()
+    return jsonify({
+        "status": "ONLINE", 
+        "database": "CONNECTED" if db_conn else "DISCONNECTED"
+    })
 
 @app.route('/api/load/<entity>', methods=['GET'])
 def load_entity(entity):
@@ -106,7 +113,7 @@ def save_entity(entity):
 if __name__ == '__main__':
     init_db()
     print("\n" + "="*50)
-    print(" SERVIDOR DUTYFINDER ATIVO")
-    print(" Endereço: http://localhost:5000")
+    print(" SERVIDOR DUTYFINDER ONLINE")
+    print(" ACESSE: http://localhost:5000")
     print("="*50 + "\n")
     app.run(host='0.0.0.0', port=5000, debug=False)

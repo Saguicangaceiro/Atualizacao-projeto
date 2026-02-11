@@ -5,7 +5,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DutyFinder Service Manager</title>
+    
+    <!-- Scripts de Estilo e Transpilação -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
     <script>
       tailwind.config = {
         darkMode: 'class',
@@ -13,50 +17,37 @@
           extend: {
             colors: {
               brand: {
-                50: '#f0f9ff',
-                100: '#e0f2fe',
-                500: '#0ea5e9',
-                600: '#0284c7',
-                700: '#0369a1',
-                900: '#0c4a6e',
+                50: '#f0f9ff', 500: '#0ea5e9', 600: '#0284c7', 900: '#0c4a6e',
               }
             }
           }
         }
       }
     </script>
+
     <script type="importmap">
-    {
-      "imports": {
-        "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-        "react/": "https://esm.sh/react@^19.2.4/",
-        "react": "https://esm.sh/react@^19.2.4",
-        "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-        "@google/genai": "https://esm.sh/@google/genai@^1.40.0"
-      }
-    }
-    </script>
+{
+  "imports": {
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom": "https://esm.sh/react-dom@^19.2.4",
+    "react-dom/client": "https://esm.sh/react-dom@^19.2.4/client",
+    "@google/genai": "https://esm.sh/@google/genai@^1.40.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/"
+  }
+}
+</script>
+
     <style>
       #loader {
-        position: fixed;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background: #f9fafb;
-        z-index: 9999;
-        font-family: sans-serif;
+        position: fixed; inset: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: #111827; color: white; z-index: 9999; font-family: sans-serif;
       }
-      .dark #loader { background: #111827; color: white; }
       .spinner {
-        width: 40px;
-        height: 40px;
-        border: 4px solid #f3f3f3;
-        border-top: 4px solid #3b82f6;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        margin-bottom: 1rem;
+        width: 40px; height: 40px; border: 4px solid #374151; border-top: 4px solid #3b82f6;
+        border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1rem;
       }
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
@@ -66,18 +57,31 @@
       <div class="spinner"></div>
       <p id="loader-text">Iniciando DutyFinder...</p>
     </div>
+    
     <div id="root"></div>
     
+    <!-- O script agora é do tipo text/babel para o BabelStandalone processar o JSX/TSX -->
+    <script type="text/babel" data-type="module" data-presets="react,typescript" src="index.tsx"></script>
+
     <script>
-      // Fail-safe: Se em 8 segundos o React não carregar, avisa o usuário
+      // Fallback: Se em 5 segundos o loader ainda estiver visível,
+      // algo deu errado no carregamento dos scripts.
       setTimeout(() => {
+        const loader = document.getElementById('loader');
         const loaderText = document.getElementById('loader-text');
-        if (loaderText && document.getElementById('loader').style.display !== 'none') {
-          loaderText.innerHTML = "O servidor está demorando a responder. <br><small>Verifique se o XAMPP e o server.py estão ativos.</small>";
+        if (loader && loader.style.display !== 'none') {
+          console.warn("DutyFinder: O carregamento está demorando mais que o esperado.");
+          loaderText.innerHTML = "O servidor está demorando a responder.<br><small>Verifique se o XAMPP e o server.py estão ativos.</small>";
+          
+          // Forçar encerramento do loader após 10 segundos para não travar a tela
+          setTimeout(() => {
+            if (loader.style.display !== 'none') {
+              loader.style.opacity = '0.5';
+              loaderText.innerHTML = "Erro de conexão detectado. Tente recarregar a página (F5).";
+            }
+          }, 5000);
         }
       }, 5000);
     </script>
-
-    <script type="module" src="index.tsx"></script>
   </body>
 </html>
