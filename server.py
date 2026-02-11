@@ -2,10 +2,18 @@
 import os
 import json
 import mimetypes
+import time
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import mysql.connector
-from mysql.connector import Error
+
+# Tenta importar o conector, se falhar avisa o usuário
+try:
+    import mysql.connector
+    from mysql.connector import Error
+except ImportError:
+    print("\n[ERRO FATAL] Biblioteca 'mysql-connector-python' não instalada.")
+    print("Execute: pip install mysql-connector-python\n")
+    exit()
 
 # Diretório base do projeto
 base_dir = os.path.abspath(os.path.dirname(__file__))
@@ -13,24 +21,30 @@ base_dir = os.path.abspath(os.path.dirname(__file__))
 app = Flask(__name__, static_folder=base_dir)
 CORS(app)
 
-# Configuração do Banco de Dados MySQL
+# Configuração padrão do XAMPP
 db_config = {
     'host': 'localhost',
     'user': 'root',
-    'password': '',
-    'database': 'dutyfinder_db'
+    'password': '',  # XAMPP por padrão vem vazio
+    'database': 'dutyfinder_db',
+    'connect_timeout': 5
 }
 
 def get_db_connection():
     try:
         connection = mysql.connector.connect(**db_config)
         return connection
-    except Error:
+    except Error as e:
         return None
 
 def init_db():
-    print(f"[*] Verificando MySQL em {db_config['host']}...")
+    print("\n" + "="*50)
+    print(" DIAGNÓSTICO DE CONEXÃO DUTYFINDER")
+    print("="*50)
+    print(f"[*] Tentando conectar ao MySQL em: {db_config['host']}...")
+    
     try:
+        # Primeiro, conecta sem banco para garantir que o serviço existe
         conn = mysql.connector.connect(
             host=db_config['host'],
             user=db_config['user'],
@@ -39,7 +53,9 @@ def init_db():
         cursor = conn.cursor()
         cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_config['database']}")
         conn.close()
+        print("[OK] Serviço MySQL detectado e ativo no XAMPP.")
 
+        # Agora conecta no banco específico
         conn = get_db_connection()
         if conn:
             cursor = conn.cursor()
@@ -52,10 +68,20 @@ def init_db():
             """)
             conn.commit()
             conn.close()
-            print(f"[OK] Banco de dados '{db_config['database']}' pronto para uso.")
+            print(f"[OK] Banco de dados '{db_config['database']}' pronto.")
+            print("="*50 + "\n")
             return True
-    except Exception as e:
-        print(f"[AVISO] MySQL não detectado (XAMPP desligado?). Usando armazenamento local. Erro: {e}")
+    except Error as e:
+        print("\n[!] FALHA DE CONEXÃO COM O XAMPP:")
+        if e.errno == 2003:
+            print("    -> O MySQL do XAMPP parece estar DESLIGADO.")
+            print("    -> Abra o XAMPP Control Panel e clique em START no MySQL.")
+        elif e.errno == 1045:
+            print("    -> Usuário ou Senha do MySQL incorretos.")
+        else:
+            print(f"    -> Erro: {e}")
+        print("\n[AVISO] O servidor rodará em MODO LIMITADO (apenas visualização).")
+        print("="*50 + "\n")
         return False
 
 # ROTA RAIZ
@@ -63,31 +89,22 @@ def init_db():
 def serve_index():
     return send_from_directory(base_dir, 'index.html')
 
-# SERVIDOR DE ARQUIVOS ESTÁTICOS COM MIME TYPES EXPLÍCITOS
+# SERVIDOR DE ARQUIVOS ESTÁTICOS
 @app.route('/<path:path>')
 def serve_static(path):
     full_path = os.path.join(base_dir, path)
-    
-    # Se o arquivo não existir fisicamente, assume que é uma rota do React e manda o index.html
     if not os.path.exists(full_path):
         return send_from_directory(base_dir, 'index.html')
     
-    # Define o MIME Type manualmente para evitar erros no Windows
     ext = os.path.splitext(path)[1].lower()
     mimetype_map = {
         '.tsx': 'application/javascript',
         '.ts': 'application/javascript',
         '.js': 'application/javascript',
         '.json': 'application/json',
-        '.css': 'text/css',
-        '.html': 'text/html',
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.svg': 'image/svg+xml'
+        '.css': 'text/css'
     }
-    
-    mimetype = mimetype_map.get(ext)
+    mimetype = mimetype_map.get(ext, mimetypes.guess_type(path)[0])
     return send_from_directory(base_dir, path, mimetype=mimetype)
 
 # API ENDPOINTS
@@ -96,7 +113,8 @@ def health():
     db_conn = get_db_connection()
     return jsonify({
         "status": "ONLINE", 
-        "database": "CONNECTED" if db_conn else "DISCONNECTED"
+        "database": "CONNECTED" if db_conn else "DISCONNECTED",
+        "info": "XAMPP/MySQL Ativo" if db_conn else "XAMPP/MySQL Desligado"
     })
 
 @app.route('/api/load/<entity>', methods=['GET'])
@@ -116,7 +134,8 @@ def load_entity(entity):
 def save_entity(entity):
     data = request.json
     conn = get_db_connection()
-    if not conn: return jsonify({"error": "No DB"}), 500
+    if not conn: 
+        return jsonify({"error": "Banco de dados não conectado. Verifique o XAMPP."}), 503
     try:
         cursor = conn.cursor()
         content_json = json.dumps(data)
@@ -130,9 +149,5 @@ def save_entity(entity):
 
 if __name__ == '__main__':
     init_db()
-    print("\n" + "="*60)
-    print(" SERVIDOR DUTYFINDER ATIVO E CORRIGIDO")
-    print(f" Caminho base: {base_dir}")
-    print(" ACESSE: http://localhost:5000")
-    print("="*60 + "\n")
+    print(f"[*] ACESSE O SISTEMA: http://localhost:5000")
     app.run(host='0.0.0.0', port=5000, debug=False)
