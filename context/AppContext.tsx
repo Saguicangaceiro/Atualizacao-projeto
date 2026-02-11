@@ -91,7 +91,7 @@ const DEFAULT_ADMIN: User = {
 
 const generateId = () => {
   try { return crypto.randomUUID(); }
-  catch (e) { return Math.random().toString(36).substring(2, 15); }
+  catch (e) { return Math.random().toString(36).substring(2, 9); }
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -147,10 +147,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (!healthCheck || !healthCheck.ok) {
         setServerStatus('OFFLINE');
-        if (users.length === 0) setUsers([DEFAULT_ADMIN]);
         return;
       }
 
+      // Carregar entidades em paralelo para nao travar
       const entities = [
         { key: 'inventory', setter: setInventory },
         { key: 'work_orders', setter: setWorkOrders },
@@ -159,15 +159,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         { key: 'equipments', setter: setEquipments }
       ];
 
-      for (const entity of entities) {
-        const data = await apiLoad(entity.key);
-        if (data && data.length > 0) entity.setter(data);
-      }
-      setServerStatus('ONLINE');
+      Promise.all(entities.map(async (e) => {
+        const data = await apiLoad(e.key);
+        if (data && data.length > 0) e.setter(data);
+      })).then(() => {
+        setServerStatus('ONLINE');
+      });
+
     } catch (e) {
       setServerStatus('OFFLINE');
     }
-  }, [users.length]);
+  }, []);
 
   useEffect(() => {
     refreshData();
@@ -175,7 +177,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => clearInterval(interval);
   }, [refreshData]);
 
-  // Funções de negócio omitidas para brevidade, mas mantidas no estado real
   const updateDatabaseConfig = async (config: DatabaseConfig) => {
     try {
       const res = await fetch(`${API_BASE}/config`, {
@@ -207,7 +208,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setMaterialRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: RequestStatus.REJECTED } : r));
       return;
     }
-    // Lógica simplificada de estoque
     setMaterialRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: RequestStatus.APPROVED, approvedAt: Date.now() } : r));
   };
 
