@@ -64,9 +64,20 @@
   <body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-200">
     <div id="loader">
       <div class="spinner"></div>
-      <p>Iniciando DutyFinder...</p>
+      <p id="loader-text">Iniciando DutyFinder...</p>
     </div>
     <div id="root"></div>
+    
+    <script>
+      // Fail-safe: Se em 8 segundos o React não carregar, avisa o usuário
+      setTimeout(() => {
+        const loaderText = document.getElementById('loader-text');
+        if (loaderText && document.getElementById('loader').style.display !== 'none') {
+          loaderText.innerHTML = "O servidor está demorando a responder. <br><small>Verifique se o XAMPP e o server.py estão ativos.</small>";
+        }
+      }, 5000);
+    </script>
+
     <script type="module" src="index.tsx"></script>
   </body>
 </html>

@@ -3,7 +3,7 @@
  * DutyFinder Service Manager
  * Developed by Antônio Marcos
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext.tsx';
 import { MaintenancePanel } from './components/MaintenancePanel.tsx';
 import { WarehousePanel } from './components/WarehousePanel.tsx';
@@ -21,6 +21,14 @@ const AppContent: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [adminViewMode, setAdminViewMode] = useState<'ADMIN' | 'USER' | 'IT' | 'DASHBOARD'>('DASHBOARD');
   const { theme, toggleTheme, users } = useApp();
+
+  // Remove o loader do HTML assim que o React montar
+  useEffect(() => {
+    const loader = document.getElementById('loader');
+    if (loader) {
+      loader.style.display = 'none';
+    }
+  }, []);
 
   const currentSyncedUser = currentUser ? users.find(u => u.id === currentUser.id) || currentUser : null;
 

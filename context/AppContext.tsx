@@ -89,6 +89,15 @@ const DEFAULT_ADMIN: User = {
   role: 'SUPER_ADMIN'
 };
 
+// Gerador de ID substituto caso o crypto.randomUUID falhe (em HTTP comum)
+const generateId = () => {
+  try {
+    return crypto.randomUUID();
+  } catch (e) {
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  }
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
@@ -107,7 +116,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [serverStatus, setServerStatus] = useState<'ONLINE' | 'OFFLINE' | 'CONNECTING'>('CONNECTING');
   const [databaseConfig, setDatabaseConfig] = useState<DatabaseConfig>({ type: 'LOCAL', status: 'LOCAL' });
 
-  // Aplica o tema ao elemento HTML
   useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -117,7 +125,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [theme]);
 
   const apiSave = async (entity: string, data: any) => {
-    if (serverStatus !== 'ONLINE' && serverStatus !== 'CONNECTING') return;
+    if (serverStatus !== 'ONLINE') return;
     try {
       await fetch(`${API_BASE}/save/${entity}`, {
         method: 'POST',
@@ -131,73 +139,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const apiLoad = async (entity: string) => {
     try {
-      const res = await fetch(`${API_BASE}/load/${entity}`);
+      // Timeout de 2 segundos para não travar o app
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      
+      const res = await fetch(`${API_BASE}/load/${entity}`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
       if (res.ok) {
         const data = await res.json();
         return Array.isArray(data) ? data : [];
       }
     } catch (e) {
-      console.warn(`Erro ao carregar entidade ${entity}:`, e);
+      console.warn(`Servidor inacessível para carregar ${entity}`);
     }
     return [];
   };
 
   const refreshData = useCallback(async () => {
-    setServerStatus('CONNECTING');
-    
-    const entities = [
-      { key: 'inventory', setter: setInventory },
-      { key: 'work_orders', setter: setWorkOrders },
-      { key: 'material_requests', setter: setMaterialRequests },
-      { key: 'resource_requests', setter: setResourceRequests },
-      { key: 'purchase_orders', setter: setPurchaseOrders },
-      { key: 'usage_logs', setter: setUsageLogs },
-      { key: 'stock_entries', setter: setStockEntries },
-      { key: 'users', setter: (data: User[]) => setUsers(data && data.length > 0 ? data : [DEFAULT_ADMIN]) },
-      { key: 'sectors', setter: setSectors },
-      { key: 'extensions', setter: setExtensions },
-      { key: 'guides', setter: setGuides },
-      { key: 'support_tickets', setter: setSupportTickets },
-      { key: 'equipments', setter: setEquipments }
-    ];
-
     try {
-      const healthCheck = await fetch(`${API_BASE}/health`).catch(() => null);
+      setServerStatus('CONNECTING');
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1500);
+      
+      const healthCheck = await fetch(`${API_BASE}/health`, { signal: controller.signal }).catch(() => null);
+      clearTimeout(timeoutId);
+
       if (!healthCheck || !healthCheck.ok) {
         setServerStatus('OFFLINE');
+        // Se estiver offline, garante que o admin padrão esteja lá para login
+        if (users.length === 0) setUsers([DEFAULT_ADMIN]);
         return;
       }
 
+      const entities = [
+        { key: 'inventory', setter: setInventory },
+        { key: 'work_orders', setter: setWorkOrders },
+        { key: 'material_requests', setter: setMaterialRequests },
+        { key: 'resource_requests', setter: setResourceRequests },
+        { key: 'purchase_orders', setter: setPurchaseOrders },
+        { key: 'usage_logs', setter: setUsageLogs },
+        { key: 'stock_entries', setter: setStockEntries },
+        { key: 'users', setter: (data: User[]) => setUsers(data && data.length > 0 ? data : [DEFAULT_ADMIN]) },
+        { key: 'sectors', setter: setSectors },
+        { key: 'extensions', setter: setExtensions },
+        { key: 'guides', setter: setGuides },
+        { key: 'support_tickets', setter: setSupportTickets },
+        { key: 'equipments', setter: setEquipments }
+      ];
+
       for (const entity of entities) {
         const data = await apiLoad(entity.key);
-        if (data) entity.setter(data);
+        if (data && data.length > 0) entity.setter(data);
       }
       setServerStatus('ONLINE');
     } catch (e) {
       setServerStatus('OFFLINE');
     }
-  }, []);
+  }, [users.length]);
 
   useEffect(() => {
     refreshData();
-    const interval = setInterval(refreshData, 30000);
+    const interval = setInterval(refreshData, 45000);
     return () => clearInterval(interval);
   }, [refreshData]);
 
   // UseEffects para salvar
-  useEffect(() => { if(inventory.length) apiSave('inventory', inventory); }, [inventory]);
-  useEffect(() => { if(workOrders.length) apiSave('work_orders', workOrders); }, [workOrders]);
-  useEffect(() => { if(materialRequests.length) apiSave('material_requests', materialRequests); }, [materialRequests]);
-  useEffect(() => { if(resourceRequests.length) apiSave('resource_requests', resourceRequests); }, [resourceRequests]);
-  useEffect(() => { if(purchaseOrders.length) apiSave('purchase_orders', purchaseOrders); }, [purchaseOrders]);
-  useEffect(() => { if(usageLogs.length) apiSave('usage_logs', usageLogs); }, [usageLogs]);
-  useEffect(() => { if(stockEntries.length) apiSave('stock_entries', stockEntries); }, [stockEntries]);
-  useEffect(() => { if(users.length > 1) apiSave('users', users); }, [users]);
-  useEffect(() => { if(sectors.length) apiSave('sectors', sectors); }, [sectors]);
-  useEffect(() => { if(extensions.length) apiSave('extensions', extensions); }, [extensions]);
-  useEffect(() => { if(guides.length) apiSave('guides', guides); }, [guides]);
-  useEffect(() => { if(supportTickets.length) apiSave('support_tickets', supportTickets); }, [supportTickets]);
-  useEffect(() => { if(equipments.length) apiSave('equipments', equipments); }, [equipments]);
+  useEffect(() => { if(serverStatus === 'ONLINE' && inventory.length) apiSave('inventory', inventory); }, [inventory, serverStatus]);
+  useEffect(() => { if(serverStatus === 'ONLINE' && workOrders.length) apiSave('work_orders', workOrders); }, [workOrders, serverStatus]);
+  useEffect(() => { if(serverStatus === 'ONLINE' && materialRequests.length) apiSave('material_requests', materialRequests); }, [materialRequests, serverStatus]);
+  useEffect(() => { if(serverStatus === 'ONLINE' && users.length > 1) apiSave('users', users); }, [users, serverStatus]);
+  useEffect(() => { if(serverStatus === 'ONLINE' && equipments.length) apiSave('equipments', equipments); }, [equipments, serverStatus]);
 
   const updateDatabaseConfig = async (config: DatabaseConfig) => {
     try {
@@ -206,16 +219,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)
       });
-      const result = await res.json();
       if (res.ok) {
         setDatabaseConfig({ ...config, status: 'CONNECTED' });
-        alert(result.message);
         refreshData();
-      } else {
-        alert("Erro: " + result.message);
       }
     } catch (e) {
-      alert("Falha ao conectar ao servidor backend Python.");
+      alert("Falha ao configurar banco.");
     }
   };
 
@@ -223,7 +232,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const initialStatus = needsMaterials ? WorkOrderStatus.PREPARATION : WorkOrderStatus.IN_PROGRESS;
     const newWO: WorkOrder = {
       ...woData,
-      id: crypto.randomUUID(),
+      id: generateId(),
       status: initialStatus,
       createdAt: Date.now(),
       requests: [],
@@ -236,7 +245,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const wo = workOrders.find(w => w.id === workOrderId);
     if (!wo) return;
     const newRequest: MaterialRequest = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       workOrderId,
       workOrderTitle: wo.title,
       items,
@@ -270,7 +279,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const idx = updatedInventory.findIndex(i => i.id === reqItem.itemId);
         updatedInventory[idx].quantity -= reqItem.quantityRequested;
         logs.push({
-          id: crypto.randomUUID(),
+          id: generateId(),
           requestId: request.id,
           workOrderId: request.workOrderId,
           itemName: reqItem.itemName,
@@ -285,9 +294,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addResourceRequest = (req: any) => setResourceRequests(prev => [{ ...req, id: crypto.randomUUID(), status: 'PENDENTE', createdAt: Date.now() }, ...prev]);
+  const addResourceRequest = (req: any) => setResourceRequests(prev => [{ ...req, id: generateId(), status: 'PENDENTE', createdAt: Date.now() }, ...prev]);
   const processResourceRequest = (requestId: string, approved: boolean, approverName: string) => setResourceRequests(prev => prev.map(req => req.id === requestId ? { ...req, status: approved ? 'LIBERADO' : 'REJEITADO', approvedBy: approved ? approverName : undefined, approvedAt: Date.now() } : req));
-  const addPurchaseOrder = (po: any) => setPurchaseOrders(prev => [{ ...po, id: crypto.randomUUID(), status: 'ORDERED' }, ...prev]);
+  const addPurchaseOrder = (po: any) => setPurchaseOrders(prev => [{ ...po, id: generateId(), status: 'ORDERED' }, ...prev]);
   const updatePurchaseStatus = (id: string, status: PurchaseStatus) => setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, status, arrivalDate: status === 'ARRIVED' ? Date.now() : po.arrivalDate } : po));
   const completePurchaseReception = (purchaseOrderId: string) => {
     const po = purchaseOrders.find(p => p.id === purchaseOrderId);
@@ -298,11 +307,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const idx = newInventory.findIndex(i => i.name.toLowerCase().trim() === item.name.toLowerCase().trim());
       if (idx >= 0) {
         newInventory[idx].quantity += item.quantity;
-        entries.push({ id: crypto.randomUUID(), itemId: newInventory[idx].id, itemName: item.name, quantityAdded: item.quantity, purchaseId: po.orderNumber, invoiceNumber: po.invoiceNumber, date: Date.now(), type: 'RESTOCK' });
+        entries.push({ id: generateId(), itemId: newInventory[idx].id, itemName: item.name, quantityAdded: item.quantity, purchaseId: po.orderNumber, invoiceNumber: po.invoiceNumber, date: Date.now(), type: 'RESTOCK' });
       } else {
-        const id = crypto.randomUUID();
+        const id = generateId();
         newInventory.push({ id, name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, minThreshold: 5 });
-        entries.push({ id: crypto.randomUUID(), itemId: id, itemName: item.name, quantityAdded: item.quantity, purchaseId: po.orderNumber, invoiceNumber: po.invoiceNumber, date: Date.now(), type: 'INITIAL' });
+        entries.push({ id: generateId(), itemId: id, itemName: item.name, quantityAdded: item.quantity, purchaseId: po.orderNumber, invoiceNumber: po.invoiceNumber, date: Date.now(), type: 'INITIAL' });
       }
     });
     setInventory(newInventory);
@@ -312,42 +321,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateInventory = (item: InventoryItem) => setInventory(prev => prev.map(i => i.id === item.id ? item : i));
   const addInventoryItem = (itemData: any, entryData: any) => {
-    const id = crypto.randomUUID();
+    const id = generateId();
     setInventory(prev => [...prev, { ...itemData, id }]);
-    setStockEntries(prev => [{ id: crypto.randomUUID(), itemId: id, itemName: itemData.name, quantityAdded: itemData.quantity, ...entryData, date: Date.now(), type: 'INITIAL' }, ...prev]);
+    setStockEntries(prev => [{ id: generateId(), itemId: id, itemName: itemData.name, quantityAdded: itemData.quantity, ...entryData, date: Date.now(), type: 'INITIAL' }, ...prev]);
   };
   const restockInventoryItem = (itemId: string, qty: number, entryData: any) => {
     const item = inventory.find(i => i.id === itemId);
     if (!item) return;
     setInventory(prev => prev.map(i => i.id === itemId ? { ...i, quantity: i.quantity + qty } : i));
-    setStockEntries(prev => [{ id: crypto.randomUUID(), itemId, itemName: item.name, quantityAdded: qty, ...entryData, date: Date.now(), type: 'RESTOCK' }, ...prev]);
+    setStockEntries(prev => [{ id: generateId(), itemId, itemName: item.name, quantityAdded: qty, ...entryData, date: Date.now(), type: 'RESTOCK' }, ...prev]);
   };
-  const updateWorkOrderStatus = (workOrderId: string, newStatus: WorkOrderStatus, notes: string) => setWorkOrders(prev => prev.map(wo => wo.id === workOrderId ? { ...wo, status: newStatus, history: [{ id: crypto.randomUUID(), date: Date.now(), status: newStatus, notes, type: 'STATUS_CHANGE' }, ...wo.history] } : wo));
+  const updateWorkOrderStatus = (workOrderId: string, newStatus: WorkOrderStatus, notes: string) => setWorkOrders(prev => prev.map(wo => wo.id === workOrderId ? { ...wo, status: newStatus, history: [{ id: generateId(), date: Date.now(), status: newStatus, notes, type: 'STATUS_CHANGE' }, ...wo.history] } : wo));
   const reopenWorkOrder = (workOrderId: string, notes: string, needsMaterials: boolean) => {
     const nextStatus = needsMaterials ? WorkOrderStatus.PREPARATION : WorkOrderStatus.IN_PROGRESS;
-    setWorkOrders(prev => prev.map(wo => wo.id === workOrderId ? { ...wo, status: nextStatus, history: [{ id: crypto.randomUUID(), date: Date.now(), status: nextStatus, notes: `Reabertura: ${notes}`, type: 'REOPEN' }, ...wo.history] } : wo));
+    setWorkOrders(prev => prev.map(wo => wo.id === workOrderId ? { ...wo, status: nextStatus, history: [{ id: generateId(), date: Date.now(), status: nextStatus, notes: `Reabertura: ${notes}`, type: 'REOPEN' }, ...wo.history] } : wo));
   };
-  const addUser = (u: any) => setUsers(prev => [...prev, { ...u, id: crypto.randomUUID() }]);
+  const addUser = (u: any) => setUsers(prev => [...prev, { ...u, id: generateId() }]);
   const removeUser = (id: string) => setUsers(prev => prev.filter(u => u.id !== id));
   const updateUserPassword = (id: string, pw: string) => setUsers(prev => prev.map(u => u.id === id ? { ...u, password: pw } : u));
   const updateUserExtension = (id: string, ext: string) => setUsers(prev => prev.map(u => u.id === id ? { ...u, extension: ext } : u));
   const updateUserProfileImage = (id: string, img: string) => setUsers(prev => prev.map(u => u.id === id ? { ...u, profileImage: img } : u));
-  const addSector = (name: string, costCenter: string) => setSectors(prev => [...prev, { id: crypto.randomUUID(), name, costCenter }]);
+  const addSector = (name: string, costCenter: string) => setSectors(prev => [...prev, { id: generateId(), name, costCenter }]);
   const updateSector = (id: string, name: string, costCenter: string) => setSectors(prev => prev.map(s => s.id === id ? { ...s, name, costCenter } : s));
   const removeSector = (id: string) => setSectors(prev => prev.filter(s => s.id !== id));
-  const addExtension = (ext: any) => setExtensions(prev => [...prev, { ...ext, id: crypto.randomUUID() }]);
+  const addExtension = (ext: any) => setExtensions(prev => [...prev, { ...ext, id: generateId() }]);
   const updateExtension = (id: string, name: string, number: string, sector: string) => setExtensions(prev => prev.map(e => e.id === id ? { ...e, name, number, sector } : e));
   const removeExtension = (id: string) => setExtensions(prev => prev.filter(e => e.id !== id));
-  const addGuide = (g: any) => setGuides(prev => [{ ...g, id: crypto.randomUUID(), createdAt: Date.now() }, ...prev]);
+  const addGuide = (g: any) => setGuides(prev => [{ ...g, id: generateId(), createdAt: Date.now() }, ...prev]);
   const removeGuide = (id: string) => setGuides(prev => prev.filter(g => g.id !== id));
-  const addSupportTicket = (t: any) => setSupportTickets(prev => [{ ...t, id: crypto.randomUUID(), status: SupportTicketStatus.PENDING, createdAt: Date.now() }, ...prev]);
+  const addSupportTicket = (t: any) => setSupportTickets(prev => [{ ...t, id: generateId(), status: SupportTicketStatus.PENDING, createdAt: Date.now() }, ...prev]);
   const processSupportTicket = (id: string, approve: boolean, priority: any = 'Média') => {
     const ticket = supportTickets.find(t => t.id === id);
     if (!ticket) return;
     if (approve && ticket.category === 'MAINTENANCE') addWorkOrder({ title: `Chamado: ${ticket.title}`, description: ticket.description, priority, requesterName: ticket.requesterName }, false);
     setSupportTickets(prev => prev.map(t => t.id === id ? { ...t, status: approve ? SupportTicketStatus.APPROVED : SupportTicketStatus.REJECTED } : t));
   };
-  const addEquipment = (eq: any) => setEquipments(prev => [...prev, { ...eq, id: crypto.randomUUID() }]);
+  const addEquipment = (eq: any) => setEquipments(prev => [...prev, { ...eq, id: generateId() }]);
   const removeEquipment = (id: string) => setEquipments(prev => prev.filter(e => e.id !== id));
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
   const exportDatabase = () => {
@@ -364,17 +373,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const data = JSON.parse(jsonData);
       if (data.inventory) setInventory(data.inventory);
       if (data.workOrders) setWorkOrders(data.workOrders);
-      if (data.materialRequests) setMaterialRequests(data.materialRequests);
-      if (data.resourceRequests) setResourceRequests(data.resourceRequests);
-      if (data.purchaseOrders) setPurchaseOrders(data.purchaseOrders);
-      if (data.usageLogs) setUsageLogs(data.usageLogs);
-      if (data.stockEntries) setStockEntries(data.stockEntries);
       if (data.users) setUsers(data.users);
-      if (data.sectors) setSectors(data.sectors);
-      if (data.extensions) setExtensions(data.extensions);
-      if (data.guides) setGuides(data.guides);
-      if (data.supportTickets) setSupportTickets(data.supportTickets);
-      if (data.equipments) setEquipments(data.equipments);
       alert("Importação concluída.");
     } catch (e) {
       alert("Erro ao importar.");
